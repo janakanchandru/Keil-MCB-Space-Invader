@@ -148,7 +148,6 @@ const uint32_t BlinkRate = 500000;
 int16_t player_direction;
 bool buttonPressed, blinkLEDs;
 
-
 void input(void const *arg) {
 	LPC_GPIO2->FIODIR |= 0x0000007C;
 	LPC_GPIO1->FIODIR |= 0xB0000000;
@@ -208,6 +207,44 @@ void updateDisplay(void const *arg) {
 
 void gameLogic(void const *arg) {
 		blinkLEDs = false;
+	// Array of enemies, each with an x and y coordinates, when an enemy is hit it changes the y coordinate to above the screen 
+	// so it can fall again.
+	// number of enemies will always stay the same but their speed of descent will increase the longer the player is alive.
+	// for loop iterates through all the enemies, checks if they are below the bottom (player dies) checks for collision with the bullets
+	// there will only be one to three bullet object. The fire rate will be such that only 1-3 bullets will be on the screen at a time. 
+	// a semaphore can be used to make sure that display is only done after all collision detection is complete. This might not be neccesary.
+	// score will go up with time and with enemies killed
+	// bullet struct has position var and fired var (is not drawn if not fired)
+	// enemy struct has position var and death timer var (controls the amount of time between death and respawn) 
+	
+	// note: checking each enemy for bullet collision is inefficient but doesnt matter so whatever
+	// sudo code: 
+	// player.x  += player_direction* playerSpeed
+	//
+	// // shooting
+	// if buttonPressed && fireRateTimer < 1
+	//	fireRateTimer = fire Rate
+	//	bullet position = player position
+	//	bullet.fired = true
+	//
+	// if fireRateTimer > 0
+	//	fireRateTimer --
+	//
+	// // enemies and collision detection
+	// for all enemies 
+	//	if enemy.deathTimer > 0
+	//		enemy.deathTimer --
+	//		continue
+	//	enemy.ypos -= falling speed
+	// 	for all bullets
+	//		if bullet.fired
+	//			bullet.ypos += bullet speed
+	//			if bullet collision with enemy
+	// 				enemy respawns at random x location above screen
+	//				enemy.deathTimer = amount of time to be dead for
+	//				bullet.fired = false
+	// 			
+	// // can add score system, increasing enemy speed, blinking LEDs and other stuff once this is implemented
 }
 
 
