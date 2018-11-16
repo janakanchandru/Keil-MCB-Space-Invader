@@ -324,6 +324,7 @@ void updateDisplay(void const *arg) {
 		for(int i = 0; i < 8; i++) {
 			if (enemies[i].dead){
 				GLCD_Bitmap(enemies[i].x, enemies[i].y, 32, 48, (unsigned char*)black_box_bitmap);
+				enemies[i].y = 0;
 				enemies[i].dead = 0;
 			}
 			else if (enemies[i].deathTimer <= 1){
@@ -333,8 +334,11 @@ void updateDisplay(void const *arg) {
 		
 		//update bullets on screen 
 		while(bullet_itr->next) {
-			if (bullet_itr->y <=220)
+			if (bullet_itr->y <=220 || !(bullet_itr->hit))
 				GLCD_Bitmap(bullet_itr->x, bullet_itr->y, 16, 24, (unsigned char*)bullet_bitmap);
+			if (bullet_itr->hit) {
+				GLCD_Bitmap(bullet_itr->x, (bullet_itr->y), 16, 24, (unsigned char*)black_box_bitmap);
+			}
 			GLCD_Bitmap(bullet_itr->x, (bullet_itr->y)-48, 16, 24, (unsigned char*)black_box_bitmap);
 			bullet_itr = bullet_itr->next;
 		}
@@ -441,8 +445,6 @@ void gameLogic(void const *arg) {
 			newBullet->x = Player_x;
 			newBullet->y = 32; //NEED VALUE FOR THIS
 			newBullet->hit = 0;
-			
-			printf("logic shoot %d\n", bullet_itr->hit);
 		}
 
 		//update bullet properties
@@ -460,12 +462,11 @@ void gameLogic(void const *arg) {
 				//collision detection
 				int tol = 20;
 				for (int i = 0; i < 8; i++) {
-					if (bullet_itr->y > enemies[i].y-tol && bullet_itr->y < enemies[i].y+tol && bullet_itr->x > enemies[i].x-tol && bullet_itr->x < enemies[i].x+tol && bullet_itr->y < 240) {
+					if (bullet_itr->y > enemies[i].y-tol && bullet_itr->y < enemies[i].y+tol && bullet_itr->x > enemies[i].x-tol && bullet_itr->x < enemies[i].x+tol+10 && bullet_itr->y < 240) {
 						enemies[i].dead = 1;
 						enemies[i].deathTimer = enemyDeathTime;
-						enemies[i].y = 0;
 						bullet_itr->hit = 1;
-						printf("HIT!");
+						break;
 					}
 				}
 				bullet_itr->y += 1;
