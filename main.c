@@ -267,6 +267,8 @@ uint16_t Player_x = 0;
 
 struct Enemy enemies[8];
 
+struct Bullet* head;
+struct Bullet* tail;
 
 const uint32_t BlinkRate = 500000; 
 
@@ -331,8 +333,8 @@ void updateDisplay(void const *arg) {
 		
 		//update bullets on screen 
 		while(bullet_itr->next) {
-			GLCD_Bitmap(bullet_itr->x, bullet_itr->y, 32, 24, (unsigned char*)bullet_bitmap);
-			GLCD_Bitmap(bullet_itr->x, (bullet_itr->y)-48, 32, 24, (unsigned char*)black_box_bitmap);
+			GLCD_Bitmap(bullet_itr->x, bullet_itr->y, 16, 24, (unsigned char*)bullet_bitmap);
+			GLCD_Bitmap(bullet_itr->x, (bullet_itr->y)-48, 16, 24, (unsigned char*)black_box_bitmap);
 			bullet_itr = bullet_itr->next;
 		}
 
@@ -398,13 +400,9 @@ void gameLogic(void const *arg) {
 	}
 
 	//setup bullets 
-	const uint32_t bullet_fr = 100; //fire rate
+	const uint32_t bullet_fr = 50; //fire rate
 	uint32_t bullet_timer = 0;
-	struct Bullet* bullet_iter = (struct Bullet*)malloc(sizeof(struct Bullet));
-	struct Bullet* head = (struct Bullet*)malloc(sizeof(struct Bullet));
-	struct Bullet* tail = (struct Bullet*)malloc(sizeof(struct Bullet));
-	head->next = tail;
-	tail->prev = head;
+	struct Bullet* bullet_itr = (struct Bullet*)malloc(sizeof(struct Bullet));
 	
 	while(1){
 		Player_x += player_direction*2;
@@ -433,41 +431,42 @@ void gameLogic(void const *arg) {
 		}
 
 		if (buttonPressed && bullet_timer >= bullet_fr) {
-			//add new bullet to linked list
-			struct Bullet* new = (struct Bullet*)malloc(sizeof(struct Bullet));
-			tail->prev->next = new;
-			new->prev = tail->prev;
-			tail->prev = new;
-			new->next = tail;
+			//add newBullet bullet to linked list
+			struct Bullet* newBullet = (struct Bullet*)malloc(sizeof(struct Bullet));
+			tail->prev->next = newBullet;
+			newBullet->prev = tail->prev;
+			tail->prev = newBullet;
+			newBullet->next = tail;
 
 			bullet_timer = 0; //reset bullet timer
 
 			//set initial position of bullet ie wherever it was fired
-			new->x = Player_x;
-			new->y = 32; //NEED VALUE FOR THIS
+			newBullet->x = Player_x;
+			newBullet->y = 32; //NEED VALUE FOR THIS
 
-			new->fired = 1;//set bullet as fired so it displays on screen
+			newBullet->fired = 1;//set bullet as fired so it displays on screen
 		}
 
 		//update bullet properties
-		bullet_itr = head;
+		bullet_itr = head->next;
 		while (bullet_itr->next) {
 			//delete bullet if it leaves screen
-			if (bullet_itr->y == 320) {
-				bullet_itr->prev->next = bullet_itr->next->prev;
-				bullet_itr->next->prev = bullet_itr->prev->next;
-				free(bullet_itr);
+			if (bullet_itr->y >= 240) {
+				bullet_itr->prev->next = bullet_itr->next;
+				bullet_itr->next->prev = bullet_itr->prev;
+				struct Bullet* temp = bullet_itr;
+				bullet_itr = bullet_itr->next;
+				free(temp);
+			}
+			else {
+				bullet_itr->y += 1;
+				bullet_itr = bullet_itr->next;
 			}
 
 			//collision detection
 			// for (int i = 0; i < 8; i++) {
 
 			// }
-
-			bullet_itr = head->next;
-			bullet_itr->y += 1;
-
-			bullet_itr = bullet_itr->next;
 		}
 		osDelay(100);
 	}
@@ -481,12 +480,16 @@ osThreadDef(gameLogic, osPriorityNormal, 1, 0);
 
 int main( void ) {
 	// D D D DDD DDDDONG INVADERRR
+	head = (struct Bullet*)malloc(sizeof(struct Bullet));
+	tail = (struct Bullet*)malloc(sizeof(struct Bullet));
+	head->next = tail;
+	tail->prev = head;
+	
 	osKernelInitialize();
 	osKernelStart();
 	
 	osThreadCreate(osThread(input), NULL);
 	osThreadCreate(osThread(updateDisplay), NULL);
 	osThreadCreate(osThread(gameLogic), NULL);
-
 	
 }
