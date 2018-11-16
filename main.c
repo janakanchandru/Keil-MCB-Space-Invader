@@ -332,6 +332,7 @@ void updateDisplay(void const *arg) {
 		//update bullets on screen 
 		while(bullet_itr->next) {
 			GLCD_Bitmap(bullet_itr->x, bullet_itr->y, 32, 24, (unsigned char*)bullet_bitmap);
+			GLCD_Bitmap(bullet_itr->x, (bullet_itr->y)-48, 32, 24, (unsigned char*)black_box_bitmap);
 			bullet_itr = bullet_itr->next;
 		}
 
