@@ -665,6 +665,7 @@ struct Enemy enemies[8];
 struct Bullet bullets[3];
 
 const uint32_t BlinkRate = 500000; 
+uint16_t blinkTimer = 0;
 
 int16_t player_direction;
 bool buttonPressed, blinkLEDs;
@@ -702,6 +703,12 @@ void input(void const *arg) {
 			}
 			LEDTimer++;
 		}
+		if (blinkTimer == 0){
+			// turn off leds
+			LPC_GPIO2->FIODIR |= 0x0000007C;
+			LPC_GPIO1->FIODIR |= 0xB0000000;
+		}
+		
 		//printf("%d \n", LEDTimer);
 	}
 }
@@ -710,8 +717,10 @@ void updateDisplay(void const *arg) {
 	GLCD_Init();
 	GLCD_Clear(0x0000);
 	GLCD_SetBackColor(0x0000);
-	
-	//char* score_text = malloc(sizeof("score:"));
+	GLCD_SetTextColor(White);
+	char scoreText[32];
+	char livesText[32];
+	//char* score_text = malloc(sizeof(char));
 	//char* score_num = malloc(sizeof("99999"));
 
 	while(1){
@@ -738,15 +747,26 @@ void updateDisplay(void const *arg) {
 		
 		//*score_num = score;
 		//strncat(score_text, score_num);
+		sprintf(scoreText, "score: %d", score);
+		sprintf(livesText, "lives: %d", life);
+		GLCD_DisplayString(9, 1, 1, scoreText);
+		GLCD_DisplayString(9, 11, 1, livesText);
 		
 		GLCD_Bitmap(Player_x, 0, 32, 24, (unsigned char*)player_bitmap); 
 		//GLCD_DisplayString(0, 0, 1, (unsigned char*)score_text);
 		
-		osDelay(100);
-		
+		if (life == 0)
+			break;
 	}
 	
+	GLCD_Clear(0x0000);
+	GLCD_DisplayString(5, 5, 1, "GAME OVER");
+	GLCD_DisplayString(8, 5, 1, scoreText);
 	
+	blinkLEDs = true;
+	osDelay(100000);
+	blinkLEDs = false;
+
 }
 
 void gameLogic(void const *arg) {
@@ -793,6 +813,7 @@ void gameLogic(void const *arg) {
 	uint16_t enemySpeed = 1;
 	uint16_t enemyDeathTime = 500;
 	uint16_t fireRateTimer = 0;
+
 	uint16_t bulletIterator = 0;
 	
 	// set all enemies to dead on start -> have them spawn at different times
@@ -822,6 +843,8 @@ void gameLogic(void const *arg) {
 			// enemy reached bottom of screen
 			if (enemies[i].y < 10) {
 				life--;
+				blinkLEDs = true;
+				blinkTimer = 100;
 				enemies[i].dead = true;
 				enemies[i].y = 0;
 				enemies[i].deathTimer = enemyDeathTime;
@@ -842,6 +865,14 @@ void gameLogic(void const *arg) {
 			}
 			
 		}
+		
+		if (blinkLEDs) {
+			blinkTimer --;
+			if (blinkTimer == 0)
+				blinkLEDs = false;
+		}
+		
+		
 		
 		// move the bullets
 		if (buttonPressed && fireRateTimer == 0) {
@@ -867,6 +898,10 @@ void gameLogic(void const *arg) {
 				bullets[i].fired = false;
 			}
 		}
+		
+		if (life == 0)
+			break;
+		
 		osDelay(100);
 	}
 }
