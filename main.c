@@ -258,6 +258,8 @@ struct Enemy {
 struct Bullet {
 	uint32_t x, y;
 	bool fired;
+	struct Bullet* next;
+	struct Bullet* prev;
 };
 
 // Player (only needs x coord)
@@ -312,8 +314,10 @@ void updateDisplay(void const *arg) {
 	GLCD_Init();
 	GLCD_Clear(0x0000);
 	
+	struct Bullet* bullet_itr = (struct Bullet*)malloc(sizeof(struct Bullet));
 
 	while(1){
+		bullet_itr = head;
 
 		for(int i = 0; i < 8; i++) {
 			if (enemies[i].dead){
@@ -325,6 +329,12 @@ void updateDisplay(void const *arg) {
 			}
 		}
 		
+		//update bullets on screen 
+		while(bullet_itr->next) {
+			GLCD_Bitmap(bullet_itr->x, bullet_itr->y, 32, 24, (unsigned char*)bullet_bitmap);
+			bullet_itr = bullet_itr->next;
+		}
+
 		GLCD_Bitmap(Player_x, 0, 32, 24, (unsigned char*)player_bitmap); 
 		
 		
@@ -385,10 +395,20 @@ void gameLogic(void const *arg) {
 		enemies[i].y = ScreenHeight;
 		enemies[i].x = (uint32_t)(lfsr113() >> 24);
 	}
+
+	//setup bullets 
+	const uint32_t bullet_fr = 100; //fire rate
+	uint32_t bullet_timer = 0;
+	struct Bullet* bullet_iter = (struct Bullet*)malloc(sizeof(struct Bullet));
+	struct Bullet* head = (struct Bullet*)malloc(sizeof(struct Bullet));
+	struct Bullet* tail = (struct Bullet*)malloc(sizeof(struct Bullet));
+	head->next = tail;
+	tail->prev = head;
 	
 	while(1){
 		Player_x += player_direction*2;
-		
+		bullet_timer++;
+
 		for(int i = 0; i < 8; i++) {
 			// enemy is dead: skip to next
 			if (enemies[i].deathTimer > 1){
@@ -409,6 +429,44 @@ void gameLogic(void const *arg) {
 				enemies[i].deathTimer = enemyDeathTime;
 			}
 			
+		}
+
+		if (buttonPressed && bullet_timer >= bullet_fr) {
+			//add new bullet to linked list
+			struct Bullet* new = (struct Bullet*)malloc(sizeof(struct Bullet));
+			tail->prev->next = new;
+			new->prev = tail->prev;
+			tail->prev = new;
+			new->next = tail;
+
+			bullet_timer = 0; //reset bullet timer
+
+			//set initial position of bullet ie wherever it was fired
+			new->x = Player_x;
+			new->y = 32; //NEED VALUE FOR THIS
+
+			new->fired = 1;//set bullet as fired so it displays on screen
+		}
+
+		//update bullet properties
+		bullet_itr = head;
+		while (bullet_itr->next) {
+			//delete bullet if it leaves screen
+			if (bullet_itr->y == 320) {
+				bullet_itr->prev->next = bullet_itr->next->prev;
+				bullet_itr->next->prev = bullet_itr->prev->next;
+				free(bullet_itr);
+			}
+
+			//collision detection
+			// for (int i = 0; i < 8; i++) {
+
+			// }
+
+			bullet_itr = head->next;
+			bullet_itr->y += 1;
+
+			bullet_itr = bullet_itr->next;
 		}
 		osDelay(100);
 	}
