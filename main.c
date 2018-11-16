@@ -257,9 +257,9 @@ struct Enemy {
 // Bullet
 struct Bullet {
 	uint32_t x, y;
-	bool fired;
 	struct Bullet* next;
 	struct Bullet* prev;
+	bool hit;
 };
 
 // Player (only needs x coord)
@@ -290,8 +290,8 @@ void input(void const *arg) {
 		else if (!(LPC_GPIO1->FIOPIN & (1 << 25))) player_direction = 1; // right
 		else player_direction = 0;
 		
-		if (!(LPC_GPIO1->FIOPIN & (1 << 20))) buttonPressed = true;
-		else buttonPressed = false;
+		if (!(LPC_GPIO1->FIOPIN & (1 << 20))) buttonPressed = 1;
+		else buttonPressed = 0;
 		
 		// Blink LEDs at BlinkRate
 		if (blinkLEDs) {
@@ -324,7 +324,7 @@ void updateDisplay(void const *arg) {
 		for(int i = 0; i < 8; i++) {
 			if (enemies[i].dead){
 				GLCD_Bitmap(enemies[i].x, enemies[i].y, 32, 48, (unsigned char*)black_box_bitmap);
-				enemies[i].dead = false;
+				enemies[i].dead = 0;
 			}
 			else if (enemies[i].deathTimer <= 1){
 				GLCD_Bitmap(enemies[i].x, enemies[i].y, 32, 24, (unsigned char*)enemy_bitmap);
@@ -333,23 +333,20 @@ void updateDisplay(void const *arg) {
 		
 		//update bullets on screen 
 		while(bullet_itr->next) {
-			GLCD_Bitmap(bullet_itr->x, bullet_itr->y, 16, 24, (unsigned char*)bullet_bitmap);
+			if (bullet_itr->y <=220)
+				GLCD_Bitmap(bullet_itr->x, bullet_itr->y, 16, 24, (unsigned char*)bullet_bitmap);
 			GLCD_Bitmap(bullet_itr->x, (bullet_itr->y)-48, 16, 24, (unsigned char*)black_box_bitmap);
 			bullet_itr = bullet_itr->next;
 		}
 
-		GLCD_Bitmap(Player_x, 0, 32, 24, (unsigned char*)player_bitmap); 
-		
-		
-		osDelay(100);
-		
+		GLCD_Bitmap(Player_x, 0, 32, 24, (unsigned char*)player_bitmap); 		
 	}
 	
 	
 }
 
 void gameLogic(void const *arg) {
-		blinkLEDs = false;
+		blinkLEDs = 0;
 	// Array of enemies, each with an x and y coordinates, when an enemy is hit it changes the y coordinate to above the screen 
 	// so it can fall again.
 	// number of enemies will always stay the same but their speed of descent will increase the longer the player is alive.
@@ -368,7 +365,7 @@ void gameLogic(void const *arg) {
 	// if buttonPressed && fireRateTimer < 1
 	//	fireRateTimer = fire Rate
 	//	bullet position = player position
-	//	bullet.fired = true
+	//	bullet.fired = 1
 	//
 	// if fireRateTimer > 0
 	//	fireRateTimer --
@@ -385,7 +382,7 @@ void gameLogic(void const *arg) {
 	//			if bullet collision with enemy
 	// 				enemy respawns at random x location above screen
 	//				enemy.deathTimer = amount of time to be dead for
-	//				bullet.fired = false
+	//				bullet.fired = 0
 	// 			
 	// // can add score system, increasing enemy speed, blinking LEDs and other stuff once this is implemented
 	
@@ -411,7 +408,7 @@ void gameLogic(void const *arg) {
 		for(int i = 0; i < 8; i++) {
 			// enemy is dead: skip to next
 			if (enemies[i].deathTimer > 1){
-				enemies[i].deathTimer --;
+				enemies[i].deathTimer--;
 				if (enemies[i].deathTimer < enemyDeathTime/2) {
 					enemies[i].y = ScreenHeight;
 					enemies[i].x = (uint32_t)(lfsr113() >> 24) + 10;
@@ -423,7 +420,7 @@ void gameLogic(void const *arg) {
 			
 			// enemy reached bottom of screen
 			if (enemies[i].y < 10) {
-				enemies[i].dead = true;
+				enemies[i].dead = 1;
 				enemies[i].y = 0;
 				enemies[i].deathTimer = enemyDeathTime;
 			}
@@ -439,34 +436,41 @@ void gameLogic(void const *arg) {
 			newBullet->next = tail;
 
 			bullet_timer = 0; //reset bullet timer
-
-			//set initial position of bullet ie wherever it was fired
+			
+			//set properties of bullet
 			newBullet->x = Player_x;
 			newBullet->y = 32; //NEED VALUE FOR THIS
-
-			newBullet->fired = 1;//set bullet as fired so it displays on screen
+			newBullet->hit = 0;
+			
+			printf("logic shoot %d\n", bullet_itr->hit);
 		}
 
 		//update bullet properties
 		bullet_itr = head->next;
 		while (bullet_itr->next) {
-			//delete bullet if it leaves screen
-			if (bullet_itr->y >= 240) {
+			//delete bullet if it leaves screen or if it has hit an enemy
+			if (bullet_itr->y >= 270 || bullet_itr->hit == 1) {
 				bullet_itr->prev->next = bullet_itr->next;
 				bullet_itr->next->prev = bullet_itr->prev;
 				struct Bullet* temp = bullet_itr;
 				bullet_itr = bullet_itr->next;
 				free(temp);
 			}
-			else {
+			else { //update properties of bullet
+				//collision detection
+				int tol = 20;
+				for (int i = 0; i < 8; i++) {
+					if (bullet_itr->y > enemies[i].y-tol && bullet_itr->y < enemies[i].y+tol && bullet_itr->x > enemies[i].x-tol && bullet_itr->x < enemies[i].x+tol && bullet_itr->y < 240) {
+						enemies[i].dead = 1;
+						enemies[i].deathTimer = enemyDeathTime;
+						enemies[i].y = 0;
+						bullet_itr->hit = 1;
+						printf("HIT!");
+					}
+				}
 				bullet_itr->y += 1;
 				bullet_itr = bullet_itr->next;
 			}
-
-			//collision detection
-			// for (int i = 0; i < 8; i++) {
-
-			// }
 		}
 		osDelay(100);
 	}
