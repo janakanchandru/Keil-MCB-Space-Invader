@@ -316,8 +316,11 @@ uint16_t black_box_bitmap[] = {
 	
 };
 
+// Set constants for height
 const uint16_t ScreenHeight = 240;
 const uint16_t ScreenWidth = 320;
+
+// Score and life
 uint16_t score = 0;
 uint16_t life = 3;
 
@@ -347,8 +350,9 @@ int16_t player_direction;
 bool buttonPressed, blinkLEDs;
 
 // 3 tasks:  I/O, Update display, Game logic
-// use mutex to control updating of positions. Mutex is between game logic thread and display thread -> add this later
 
+//the input thread is responsible for sensing if the peripherals are being interacted with by the user
+//it detects if the joystick is being moved and/or pressed, and operates the LED lights  
 void input(void const *arg) {
 	LPC_GPIO2->FIODIR |= 0x0000007C;
 	LPC_GPIO1->FIODIR |= 0xB0000000;
@@ -364,7 +368,7 @@ void input(void const *arg) {
 		if (!(LPC_GPIO1->FIOPIN & (1 << 20))) buttonPressed = true;
 		else buttonPressed = false;
 		
-		// Blink LEDs at BlinkRate
+		// Blink LEDs at BlinkRate when user loses (blinkLEDs = true)
 		if (blinkLEDs) {
 			if (LEDTimer > BlinkRate) LEDTimer = 0;
 			else if (LEDTimer > BlinkRate/2) {
@@ -384,105 +388,72 @@ void input(void const *arg) {
 			LPC_GPIO2->FIODIR |= 0x0000007C;
 			LPC_GPIO1->FIODIR |= 0xB0000000;
 		}
-		
-		//printf("%d \n", LEDTimer);
 	}
 }
 
+//the updateDisplay thread outputs the graphics of the game to the GLCD
 void updateDisplay(void const *arg) {
+	// Initializes GLCD for display
 	GLCD_Init();
 	GLCD_Clear(0x0000);
 	GLCD_SetBackColor(0x0000);
 	GLCD_SetTextColor(White);
+
+	// Char arrays to update score and life
 	char scoreText[32];
 	char livesText[32];
-	//char* score_text = malloc(sizeof(char));
-	//char* score_num = malloc(sizeof("99999"));
 
+	// Display Loop
 	while(1){
+		// Iterates bullet array and updates of bullets location on screen
 		for (int i = 0; i < 3; i++) {
 			if (bullets[i].fired){
 				GLCD_Bitmap(bullets[i].x+10, bullets[i].y, 16, 24, (unsigned char*)bullet_bitmap);
 				GLCD_Bitmap(bullets[i].x+10, bullets[i].y-48, 32, 48, (unsigned char*)black_box_bitmap);
 			}
 		}
-		
+		// Iterates enemy array and updates enemy location on screen
 		for(int i = 0; i < 8; i++) {
+			// If enemy is dead, puts enemy at top of the screen
 			if (enemies[i].dead){
 				GLCD_Bitmap(enemies[i].x, enemies[i].y, 32, 48, (unsigned char*)black_box_bitmap);
 				GLCD_Bitmap(enemies[i].x, enemies[i].y-40, 32, 48, (unsigned char*)black_box_bitmap);
 
 				enemies[i].dead = false;
 			}
+			// If deathtimer is less than or equal to 1
 			else if (enemies[i].deathTimer <= 1){
 				GLCD_Bitmap(enemies[i].x, enemies[i].y, 32, 36, (unsigned char*)enemy_bitmap);
 			}
 		}
 		
-		//*score_num = score;
-		//strncat(score_text, score_num);
+		// Prints score and life onto the screen
 		sprintf(scoreText, "score: %d", score);
 		sprintf(livesText, "lives: %d", life);
 		GLCD_DisplayString(9, 1, 1, (unsigned char *)scoreText);
 		GLCD_DisplayString(9, 11, 1, (unsigned char *)livesText);
 		
-		GLCD_Bitmap(Player_x, 0, 64, 24, (unsigned char*)player_bitmap); 
-		//GLCD_DisplayString(0, 0, 1, (unsigned char*)score_text);
+		GLCD_Bitmap(Player_x, 0, 64, 24, (unsigned char*)player_bitmap);
 		
 		if (life == 0)
 			break;
 	}
 	
+	// When game is over
 	GLCD_Clear(0x0000);
 	GLCD_DisplayString(5, 5, 1, (unsigned char *)"GAME OVER");
 	GLCD_DisplayString(8, 5, 1, (unsigned char *)scoreText);
 	
+	// Blink LEDs constantly to indicate game is over (ie. user lost)
 	blinkLEDs = true;
 	osDelay(100000);
 	blinkLEDs = false;
 
 }
 
+//the gameLogic thread controls the game and implements its logic. it controls the enemies, bullets, collisions, rate of fire, etc. 
 void gameLogic(void const *arg) {
-		blinkLEDs = false;
-	// Array of enemies, each with an x and y coordinates, when an enemy is hit it changes the y coordinate to above the screen 
-	// so it can fall again.
-	// number of enemies will always stay the same but their speed of descent will increase the longer the player is alive.
-	// for loop iterates through all the enemies, checks if they are below the bottom (player dies) checks for collision with the bullets
-	// there will only be one to three bullet object. The fire rate will be such that only 1-3 bullets will be on the screen at a time. 
-	// a semaphore can be used to make sure that display is only done after all collision detection is complete. This might not be neccesary.
-	// score will go up with time and with enemies killed
-	// bullet struct has position var and fired var (is not drawn if not fired)
-	// enemy struct has position var and death timer var (controls the amount of time between death and respawn) 
-	
-	// note: checking each enemy for bullet collision is inefficient but doesnt matter so whatever
-	// sudo code: 
-	// player.x  += player_direction* playerSpeed
-	// 
-	// // shooting
-	// if buttonPressed && fireRateTimer < 1
-	//	fireRateTimer = fire Rate
-	//	bullet position = player position
-	//	bullet.fired = true
-	//
-	// if fireRateTimer > 0
-	//	fireRateTimer --
-	//
-	// // enemies and collision detection
-	// for all enemies 
-	//	if enemy.deathTimer > 0
-	//		enemy.deathTimer --
-	//		continue
-	//	enemy.ypos -= falling speed
-	// 	for all bullets
-	//		if bullet.fired
-	//			bullet.ypos += bullet speed
-	//			if bullet collision with enemy
-	// 				enemy respawns at random x location above screen
-	//				enemy.deathTimer = amount of time to be dead for
-	//				bullet.fired = false
-	// 			
-	// // can add score system, increasing enemy speed, blinking LEDs and other stuff once this is implemented
+	blinkLEDs = false;
 	
 	uint16_t enemySpeed = 1;
 	uint16_t enemyDeathTime = 500;
@@ -498,6 +469,7 @@ void gameLogic(void const *arg) {
 	}
 	
 	while(1){
+		// Updates player position based on inputs
 		Player_x += player_direction*2*(Player_x + player_direction*2 > 0 && Player_x + player_direction*2 < ScreenWidth - 30);
 		
 			
@@ -541,13 +513,17 @@ void gameLogic(void const *arg) {
 			
 		}
 		
+		// blink LED timer logic
 		if (blinkLEDs) {
 			blinkTimer --;
 			if (blinkTimer == 0)
 				blinkLEDs = false;
 		}
 		
-		
+		// fire rate timer to limit fire rate
+		if (fireRateTimer > 0){
+			fireRateTimer--;
+		}
 		
 		// move the bullets
 		if (buttonPressed && fireRateTimer == 0) {
@@ -560,11 +536,8 @@ void gameLogic(void const *arg) {
 			if (bulletIterator >= 3)
 				bulletIterator = 0;
 		}
-		
-		if (fireRateTimer > 0){
-			fireRateTimer--;
-		}
-		
+	
+		// Updates positions of bullets as they are fired
 		for (int i = 0; i < 3; i++) {
 			if (bullets[i].fired){
 				bullets[i].y += 5;
@@ -581,20 +554,18 @@ void gameLogic(void const *arg) {
 	}
 }
 
-
+// Thread definitions
 osThreadDef(input, osPriorityNormal, 1, 0);
 osThreadDef(updateDisplay, osPriorityNormal, 1, 0);
 osThreadDef(gameLogic, osPriorityNormal, 1, 0);
 
 
 int main( void ) {
-	// D D D DDD DDDDONG INVADERRR
+	// Intializes all threads
 	osKernelInitialize();
 	osKernelStart();
 	
 	osThreadCreate(osThread(input), NULL);
 	osThreadCreate(osThread(updateDisplay), NULL);
-	osThreadCreate(osThread(gameLogic), NULL);
-
-	
+	osThreadCreate(osThread(gameLogic), NULL);	
 }
