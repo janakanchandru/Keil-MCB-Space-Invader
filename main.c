@@ -350,8 +350,9 @@ int16_t player_direction;
 bool buttonPressed, blinkLEDs;
 
 // 3 tasks:  I/O, Update display, Game logic
-// use mutex to control updating of positions. Mutex is between game logic thread and display thread -> add this later
 
+//the input thread is responsible for sensing if the peripherals are being interacted with by the user
+//it detects if the joystick is being moved and/or pressed, and operates the LED lights  
 void input(void const *arg) {
 	LPC_GPIO2->FIODIR |= 0x0000007C;
 	LPC_GPIO1->FIODIR |= 0xB0000000;
@@ -367,7 +368,7 @@ void input(void const *arg) {
 		if (!(LPC_GPIO1->FIOPIN & (1 << 20))) buttonPressed = true;
 		else buttonPressed = false;
 		
-		// Blink LEDs at BlinkRate
+		// Blink LEDs at BlinkRate when user loses (blinkLEDs = true)
 		if (blinkLEDs) {
 			if (LEDTimer > BlinkRate) LEDTimer = 0;
 			else if (LEDTimer > BlinkRate/2) {
@@ -390,6 +391,7 @@ void input(void const *arg) {
 	}
 }
 
+//the updateDisplay thread outputs the graphics of the game to the GLCD
 void updateDisplay(void const *arg) {
 	// Initializes GLCD for display
 	GLCD_Init();
@@ -431,8 +433,7 @@ void updateDisplay(void const *arg) {
 		GLCD_DisplayString(9, 1, 1, (unsigned char *)scoreText);
 		GLCD_DisplayString(9, 11, 1, (unsigned char *)livesText);
 		
-		GLCD_Bitmap(Player_x, 0, 64, 24, (unsigned char*)player_bitmap); 
-		//GLCD_DisplayString(0, 0, 1, (unsigned char*)score_text);
+		GLCD_Bitmap(Player_x, 0, 64, 24, (unsigned char*)player_bitmap);
 		
 		if (life == 0)
 			break;
@@ -443,13 +444,14 @@ void updateDisplay(void const *arg) {
 	GLCD_DisplayString(5, 5, 1, (unsigned char *)"GAME OVER");
 	GLCD_DisplayString(8, 5, 1, (unsigned char *)scoreText);
 	
-	// Blink LEDs constantly to indicate game is over
+	// Blink LEDs constantly to indicate game is over (ie. user lost)
 	blinkLEDs = true;
 	osDelay(100000);
 	blinkLEDs = false;
 
 }
 
+//the gameLogic thread controls the game and implements its logic. it controls the enemies, bullets, collisions, rate of fire, etc. 
 void gameLogic(void const *arg) {
 	blinkLEDs = false;
 	
@@ -559,14 +561,11 @@ osThreadDef(gameLogic, osPriorityNormal, 1, 0);
 
 
 int main( void ) {
-	// D D D DDD DDDDONG INVADERRR
 	// Intializes all threads
 	osKernelInitialize();
 	osKernelStart();
 	
 	osThreadCreate(osThread(input), NULL);
 	osThreadCreate(osThread(updateDisplay), NULL);
-	osThreadCreate(osThread(gameLogic), NULL);
-
-	
+	osThreadCreate(osThread(gameLogic), NULL);	
 }
